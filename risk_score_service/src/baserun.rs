@@ -350,7 +350,9 @@ pub fn read_hs_fill_f32(wave_root: &Path) -> f32 {
     -999.9
 }
 
-/// Baserun ids to process: all pending (oldest first), or one forced baserun.
+/// Baserun to process this cycle: **newest pending only** (no backlog), or one forced baserun.
+///
+/// Older pending runs are skipped so retention GC does not cause a create/delete loop.
 pub fn baseruns_to_process(
     input_root: &Path,
     output_root: &Path,
@@ -372,7 +374,11 @@ pub fn baseruns_to_process(
     }
 
     let pending = scan_pending_input_baseruns(input_root, output_root)?;
-    Ok(pending.into_iter().map(|s| s.id).collect())
+    Ok(pending
+        .into_iter()
+        .last()
+        .map(|s| vec![s.id])
+        .unwrap_or_default())
 }
 
 /// Newest pending baserun id, or `forced` if set (input must be complete).
@@ -381,10 +387,10 @@ pub fn pick_baserun(
     output_root: &Path,
     forced: Option<String>,
 ) -> Result<String> {
-    Ok(baseruns_to_process(input_root, output_root, forced)?
-        .last()
-        .cloned()
-        .with_context(|| "no baserun selected")?)
+    baseruns_to_process(input_root, output_root, forced)?
+        .into_iter()
+        .next()
+        .with_context(|| "no baserun selected")
 }
 
 #[cfg(test)]
