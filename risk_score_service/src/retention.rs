@@ -1,5 +1,6 @@
 //! Retention / garbage collection for risk score output directories.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -41,26 +42,34 @@ pub fn list_output_baseruns(output_root: &Path) -> Result<Vec<String>> {
 
 /// Delete output baserun dirs beyond the newest `keep` entries.
 ///
-/// Returns ids of deleted baseruns (oldest removed first).
-pub fn gc_old_outputs(output_root: &Path, keep: usize) -> Result<Vec<String>> {
+/// `protect` — baserun ids never deleted (e.g. just processed this cycle).
+pub fn gc_old_outputs(
+    output_root: &Path,
+    keep: usize,
+    protect: &[String],
+) -> Result<Vec<String>> {
     if keep == 0 {
         anyhow::bail!("retention must be at least 1");
     }
 
+    let protect_set: HashSet<&str> = protect.iter().map(|s| s.as_str()).collect();
     let mut ids = list_output_baseruns(output_root)?;
-    if ids.len() <= keep {
-        return Ok(Vec::new());
-    }
+    let mut removed = Vec::new();
 
-    let remove_count = ids.len() - keep;
-    let to_remove: Vec<String> = ids.drain(..remove_count).collect();
-
-    for id in &to_remove {
-        let dir = output_root.join(id);
+    while ids.len() > keep {
+        let Some(pos) = ids.iter().position(|id| !protect_set.contains(id.as_str())) else {
+            crate::log!(
+                "[risk_score] GC retention={keep} — semua output dilindungi, tidak ada yang dihapus"
+            );
+            break;
+        };
+        let id = ids.remove(pos);
+        let dir = output_root.join(&id);
         fs::remove_dir_all(&dir)
             .with_context(|| format!("GC remove {}", dir.display()))?;
-        eprintln!("GC removed output baserun {} ({})", id, dir.display());
+        crate::log!("[risk_score] GC removed output baserun {} ({})", id, dir.display());
+        removed.push(id);
     }
 
-    Ok(to_remove)
+    Ok(removed)
 }

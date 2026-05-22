@@ -279,7 +279,7 @@ pub fn scan_complete_input_baseruns(input_root: &Path) -> Result<Vec<BaserunScan
         if is_complete_input_baserun(&path, &id) {
             match build_baserun_scan(path, id.clone()) {
                 Ok(scan) => found.push(scan),
-                Err(e) => eprintln!("skip baserun {id}: {e:#}"),
+                Err(e) => crate::log!("[risk_score] skip baserun {id}: {e:#}"),
             }
         }
     }
@@ -350,14 +350,19 @@ pub fn read_hs_fill_f32(wave_root: &Path) -> f32 {
     -999.9
 }
 
-/// Baserun to process this cycle: **newest pending only** (no backlog), or one forced baserun.
+/// Baserun to process: newest pending **within the newest `retention` complete inputs** only.
 ///
-/// Older pending runs are skipped so retention GC does not cause a create/delete loop.
+/// Input baseruns older than the retention window are ignored (no process / no GC loop).
 pub fn baseruns_to_process(
     input_root: &Path,
     output_root: &Path,
     forced: Option<String>,
+    retention: usize,
 ) -> Result<Vec<String>> {
+    if retention == 0 {
+        bail!("retention must be at least 1");
+    }
+
     if let Some(b) = forced {
         let p = input_root.join(&b);
         if !p.is_dir() {
@@ -373,7 +378,19 @@ pub fn baseruns_to_process(
         return Ok(vec![b]);
     }
 
-    let pending = scan_pending_input_baseruns(input_root, output_root)?;
+    let complete_inputs = scan_complete_input_baseruns(input_root)?;
+    let in_window: std::collections::HashSet<&str> = complete_inputs
+        .iter()
+        .rev()
+        .take(retention)
+        .map(|s| s.id.as_str())
+        .collect();
+
+    let pending = scan_pending_input_baseruns(input_root, output_root)?
+        .into_iter()
+        .filter(|s| in_window.contains(s.id.as_str()))
+        .collect::<Vec<_>>();
+
     Ok(pending
         .into_iter()
         .last()
@@ -386,8 +403,9 @@ pub fn pick_baserun(
     input_root: &Path,
     output_root: &Path,
     forced: Option<String>,
+    retention: usize,
 ) -> Result<String> {
-    baseruns_to_process(input_root, output_root, forced)?
+    baseruns_to_process(input_root, output_root, forced, retention)?
         .into_iter()
         .next()
         .with_context(|| "no baserun selected")

@@ -7,27 +7,34 @@ use anyhow::Result;
 use clap::Parser;
 
 use risk_score_worker::cli::Cli;
-use risk_score_worker::{baseruns_to_process, gc_old_outputs, process_baserun};
+use risk_score_worker::{baseruns_to_process, gc_old_outputs, log, process_baserun};
 
 fn run_once(cli: &Cli) -> Result<bool> {
-    let pending = baseruns_to_process(&cli.input_root, &cli.output_root, cli.baserun.clone())?;
+    let pending = baseruns_to_process(
+        &cli.input_root,
+        &cli.output_root,
+        cli.baserun.clone(),
+        cli.retention,
+    )?;
 
     if pending.is_empty() {
         if cli.baserun.is_none() {
-            eprintln!(
-                "[risk_score] IDLE — tidak ada baserun input baru yang perlu diproses \
-                 (semua baserun lengkap sudah punya output complete di {})",
-                cli.output_root.display()
+            log!(
+                "[risk_score] IDLE — tidak ada baserun baru dalam retention={} \
+                 (input lengkap tanpa output, atau di luar jendela retention)",
+                cli.retention
             );
         }
         return Ok(false);
     }
 
+    let mut processed = Vec::new();
+
     for baserun in &pending {
         if cli.baserun.is_none() {
-            eprintln!("[risk_score] processing newest pending baserun: {baserun}");
+            log!("[risk_score] processing newest pending baserun: {baserun}");
         }
-        eprintln!(
+        log!(
             "[risk_score] WORKER_START input={} output={} baserun={baserun}",
             cli.input_root.display(),
             cli.output_root.display()
@@ -35,16 +42,17 @@ fn run_once(cli: &Cli) -> Result<bool> {
 
         process_baserun(&cli.input_root, &cli.output_root, baserun)?;
 
-        eprintln!(
+        log!(
             "[risk_score] WORKER_COMPLETE baserun={baserun} output={}",
             cli.output_root.join(baserun).display()
         );
+        processed.push(baserun.clone());
     }
 
     if !cli.no_gc {
-        let removed = gc_old_outputs(&cli.output_root, cli.retention)?;
+        let removed = gc_old_outputs(&cli.output_root, cli.retention, &processed)?;
         if removed.is_empty() {
-            eprintln!(
+            log!(
                 "[risk_score] GC retention={} — tidak ada output lama yang dihapus",
                 cli.retention
             );
@@ -58,7 +66,12 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     if cli.dry_run {
-        let pending = baseruns_to_process(&cli.input_root, &cli.output_root, cli.baserun.clone())?;
+        let pending = baseruns_to_process(
+            &cli.input_root,
+            &cli.output_root,
+            cli.baserun.clone(),
+            cli.retention,
+        )?;
         for b in pending {
             println!("{b}");
         }
@@ -70,9 +83,10 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    eprintln!(
-        "[risk_score] WATCH mode: scan setiap {} detik",
-        cli.interval_secs
+    log!(
+        "[risk_score] WATCH mode: scan setiap {} detik (retention={})",
+        cli.interval_secs,
+        cli.retention
     );
 
     loop {
