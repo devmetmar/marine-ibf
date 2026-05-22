@@ -22,7 +22,7 @@ use crate::risk::{compute_chunk_risks, SHIP_MODELS};
 use crate::zarr_store::{copy_coord_array, open_fs_store, zpath};
 
 fn log_progress(baserun: &str, pct: u64, done: u64, total: u64) {
-    eprintln!(
+    crate::log!(
         "[risk_score] PROGRESS baserun={baserun} {pct}% ({done}/{total} chunks)"
     );
 }
@@ -34,33 +34,28 @@ fn log_done(
     wave_model: &Option<String>,
     elapsed_secs: f64,
 ) {
-    eprintln!(
-        "\n\
-         ========================================\n\
-         [risk_score] DONE — risk.zarr selesai\n\
-         baserun     : {baserun}\n\
-         risk.zarr   : {}\n\
-         manifest    : {} (status=complete)\n\
-         wave_model  : {}\n\
-         elapsed     : {elapsed_secs:.1}s\n\
-         ========================================\n",
-        risk_path.display(),
-        manifest_path.display(),
-        wave_model.as_deref().unwrap_or("?"),
+    crate::log!("========================================");
+    crate::log!("[risk_score] DONE — risk.zarr selesai");
+    crate::log!("baserun     : {baserun}");
+    crate::log!("risk.zarr   : {}", risk_path.display());
+    crate::log!(
+        "manifest    : {} (status=complete)",
+        manifest_path.display()
     );
+    crate::log!("wave_model  : {}", wave_model.as_deref().unwrap_or("?"));
+    crate::log!("elapsed     : {elapsed_secs:.1}s");
+    crate::log!("========================================");
 }
 
 fn on_run_failed(out_dir: &Path, baserun: &str, err: &anyhow::Error) {
-    eprintln!(
-        "[risk_score] FAILED baserun={baserun}: {err:#}"
-    );
+    crate::log!("[risk_score] FAILED baserun={baserun}: {err:#}");
     if let Err(clean_err) = cleanup_staging(out_dir) {
-        eprintln!(
+        crate::log!(
             "[risk_score] WARN cleanup staging after failure: {clean_err:#}"
         );
     }
     if let Err(m_err) = write_failed(out_dir, baserun, &err.to_string()) {
-        eprintln!(
+        crate::log!(
             "[risk_score] WARN could not write failed manifest: {m_err:#}"
         );
     }
@@ -169,7 +164,7 @@ fn process_baserun_inner(
     let total_chunks: u64 = chunk_grid_shape.iter().product();
     let grid_shape: Vec<u64> = hs.shape().to_vec();
 
-    eprintln!(
+    crate::log!(
         "[risk_score] START baserun={baserun} grid={grid_shape:?} chunks={total_chunks} staging={}",
         staging_path.display()
     );
@@ -238,7 +233,7 @@ fn process_baserun_inner(
         elapsed,
     );
 
-    eprintln!("[risk_score] PUBLISH baserun={baserun} swapping staging -> risk.zarr");
+    crate::log!("[risk_score] PUBLISH baserun={baserun} swapping staging -> risk.zarr");
     let risk_path = publish_risk_zarr(out_dir)?;
     let manifest_path = publish_manifest(out_dir, &manifest_value)?;
 

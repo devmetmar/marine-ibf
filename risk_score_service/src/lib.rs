@@ -2,6 +2,7 @@
 
 pub mod baserun;
 pub mod cli;
+pub mod log;
 pub mod manifest;
 pub mod pipeline;
 pub mod retention;

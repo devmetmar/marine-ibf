@@ -62,7 +62,9 @@ Aturan konsumen: **hanya baca output jika `risk_manifest.json` berisi `"status":
 
 Urutan publish: staging zarr → swap ke `risk.zarr` (backup `.replaced` bila gagal) → manifest `complete` ditulis lewat file tmp + `rename`.
 
-Baserun tidak lengkap **dilewati**. Per siklus hanya **satu** baserun: input **lengkap** + **belum** punya output `complete` yang **terbaru** (bukan semua pending — menghindari loop dengan retention GC).
+Baserun tidak lengkap **dilewati**. Per siklus hanya **satu** baserun: input **lengkap** + **belum** punya output `complete`, dan masuk **N baserun input terbaru** (`N` = `RETENTION`). Input lebih lama tanpa output **diabaikan** (tidak diproses, tidak memicu loop GC).
+
+Setelah proses, GC menghapus output terlama di luar `RETENTION`, tetapi **tidak** menghapus baserun yang baru saja diproses di siklus yang sama.
 
 ### Mode watch (baserun baru otomatis)
 
