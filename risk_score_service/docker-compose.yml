@@ -1,0 +1,24 @@
+# Path host & interval: salin .env.example → .env (wajib, tidak di-commit).
+# Substitusi ${...} dibaca dari file .env di folder ini.
+
+services:
+  risk-score-worker:
+    build: .
+    image: risk-score-worker:local
+    container_name: risk-score-worker
+    env_file:
+      - .env
+    network_mode: "none"
+    volumes:
+      - ${OFS_INPUT_ROOT}:/input:ro
+      - ${RISK_OUTPUT_ROOT}:/output
+    command:
+      - --input-root
+      - /input
+      - --output-root
+      - /output
+      - --retention
+      - "${RETENTION}"
+      - --interval-secs
+      - "${INTERVAL_SECS}"
+    restart: unless-stopped
