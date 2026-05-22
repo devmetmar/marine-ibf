@@ -7,9 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use risk_score_worker::cli::Cli;
-use risk_score_worker::{
-    baseruns_to_process, gc_old_outputs, process_baserun, scan_pending_input_baseruns,
-};
+use risk_score_worker::{baseruns_to_process, gc_old_outputs, process_baserun};
 
 fn run_once(cli: &Cli) -> Result<bool> {
     let pending = baseruns_to_process(&cli.input_root, &cli.output_root, cli.baserun.clone())?;
@@ -25,20 +23,10 @@ fn run_once(cli: &Cli) -> Result<bool> {
         return Ok(false);
     }
 
-    if cli.baserun.is_none() {
-        let all_pending = scan_pending_input_baseruns(&cli.input_root, &cli.output_root)?;
-        eprintln!(
-            "[risk_score] found {} pending baserun(s): {}",
-            all_pending.len(),
-            all_pending
-                .iter()
-                .map(|s| s.id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-
     for baserun in &pending {
+        if cli.baserun.is_none() {
+            eprintln!("[risk_score] processing newest pending baserun: {baserun}");
+        }
         eprintln!(
             "[risk_score] WORKER_START input={} output={} baserun={baserun}",
             cli.input_root.display(),

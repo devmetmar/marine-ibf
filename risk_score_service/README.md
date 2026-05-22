@@ -25,8 +25,8 @@ Sebelum proses, worker memindai folder input (`ofs-latest`) lewat modul `baserun
 |--------|--------|
 | `scan_complete_input_baseruns` | Daftar semua baserun **lengkap**, urut lama → baru |
 | `scan_pending_input_baseruns` | Input lengkap yang **belum** punya output `status: complete` |
-| `baseruns_to_process` | Daftar baserun yang akan dihitung (semua pending, atau `--baserun`) |
-| `pick_baserun` | Baserun pending **terbaru**, atau `--baserun` paksa (input harus lengkap) |
+| `baseruns_to_process` | **Satu** baserun per siklus: pending **terbaru** saja, atau `--baserun` |
+| `pick_baserun` | Id baserun yang akan diproses (sama seperti di atas) |
 
 **Syarat “lengkap”** untuk satu folder baserun (menghindari proses saat Zarr masih ditulis):
 
@@ -62,14 +62,14 @@ Aturan konsumen: **hanya baca output jika `risk_manifest.json` berisi `"status":
 
 Urutan publish: staging zarr → swap ke `risk.zarr` (backup `.replaced` bila gagal) → manifest `complete` ditulis lewat file tmp + `rename`.
 
-Baserun tidak lengkap **dilewati**. Yang diproses: baserun input **lengkap** yang **belum** punya risk output `complete` (urut lama → baru, backlog ikut terproses dalam satu siklus).
+Baserun tidak lengkap **dilewati**. Per siklus hanya **satu** baserun: input **lengkap** + **belum** punya output `complete` yang **terbaru** (bukan semua pending — menghindari loop dengan retention GC).
 
 ### Mode watch (baserun baru otomatis)
 
 | `--interval-secs` | Perilaku |
 |-------------------|----------|
-| `0` (default CLI) | Satu kali scan → proses semua pending → exit (cocok untuk cron) |
-| `> 0` (default Compose: **300**) | Loop: scan → proses pending → tidur → ulang |
+| `0` (default CLI) | Satu kali scan → proses pending terbaru (jika ada) → exit |
+| `> 0` (default Compose: **300**) | Loop: scan → proses **maks. 1** baserun baru → tidur → ulang |
 
 Docker Compose memakai `restart: unless-stopped` + `INTERVAL_SECS` dari `.env` agar container tetap jalan dan mendeteksi baserun baru setelah konversi OFS selesai.
 
